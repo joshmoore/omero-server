@@ -23,6 +23,12 @@ targetCompatibility = JavaVersion.VERSION_1_8
 repositories {
     mavenCentral()
     mavenLocal()
+    maven { url 'https://artifacts.openmicroscopy.org/artifactory/maven/' }
+}
+
+ext {
+    //the database type: must match the version set in omero-model
+    databaseType = "psql"
 }
 
 dependencies {
@@ -43,9 +49,10 @@ dependencies {
     implementation "org.springframework:spring-jms:4.3.14.RELEASE"
     implementation "org.springframework.security:spring-security-ldap:4.2.4.RELEASE"
 
-    // Postgres connect driver for java
-    implementation 'org.postgresql:postgresql:42.2.1'
-
+    if (databaseType.equals("psql")) {
+        // Postgres connect driver for java
+        implementation 'org.postgresql:postgresql:42.2.1'
+    }
     // Used by hibernate, see: https://stackoverflow.com/a/14365438
     implementation 'org.javassist:javassist:3.22.0-GA'
 
@@ -74,30 +81,42 @@ dependencies {
 test {
     // enable TestNG support (default is JUnit)
     useTestNG() {
-        suites "src/test/resources" // project.fileTree(dir: "src/test/resources", include: '**/*.xml')
+        suites "src/test/resources"
     }
 }
 
-/**
- * This task will resolve to find the current ICE version installed
- * on your system PATH. It will choose the appropriate ice dependency for you
- * and set the a source dir for the build to look at.
- */
-task processIce {
-    if (slice.iceVersion.contains('3.7')) {
-        dependencies.add('compile', 'com.zeroc:ice:3.7.+')
-        sourceSets.main.java {
-            srcDirs 'src/main/ice37', 'src/generated/ice37'
-        }
-        slice.output = file('src/generated/ice37')
-    } else if (slice.iceVersion.contains('3.6')) {
-        dependencies.add('compile', 'com.zeroc:ice:3.6.+')
-        sourceSets.main.java {
-            srcDirs 'src/main/ice36', 'src/generated/ice36'
-        }
-        slice.output = file('src/generated/ice36')
-    }
+clean {
+    delete "src/generated"
 }
 
+if (slice.iceVersion.contains('3.7')) {
+    dependencies {
+        api 'com.zeroc:ice:3.7.2'
+    }
+    sourceSets.main.java {
+        srcDirs 'src/main/ice37', 'src/generated/ice37'
+    }
+    slice.output = file('src/generated/ice37')
+} else if (slice.iceVersion.contains('3.6')) {
+    dependencies {
+        api 'com.zeroc:ice:3.6.4'
+    }
+    sourceSets.main.java {
+        srcDirs 'src/main/ice36', 'src/generated/ice36'
+    }
+    slice.output = file('src/generated/ice36')
+}
+
+jar {
+    manifest {
+        attributes(
+                'Build-Timestamp': new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()),
+                'Created-By': "Gradle ${gradle.gradleVersion}",
+                'Build-Jdk': "${System.properties['java.version']} (${System.properties['java.vendor']} ${System.properties['java.vm.version']})",
+                'Main-Class': 'ome.services.fulltext.Main',
+                "Class-Path": configurations.runtimeClasspath.collect { it.getName() }.join(' ')
+        )
+    }
+}
 // Add publish functionality
 apply from: 'publish.gradle'
